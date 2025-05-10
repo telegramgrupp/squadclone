@@ -12,7 +12,7 @@ export default function FakeVideo({ fakeUser, onVideoEnd }: FakeVideoProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Önce video kaynaklarını konsola yazdıralım, sorun teşhisi için
+  // Video kaynaklarını konsola yaz, sorun teşhisi için
   useEffect(() => {
     console.log("Video kaynağı:", fakeUser.videoSrc);
     console.log("Fake kullanıcı bilgileri:", fakeUser);
@@ -30,6 +30,10 @@ export default function FakeVideo({ fakeUser, onVideoEnd }: FakeVideoProps) {
       videoElement.play().catch(err => {
         console.error('Video otomatik başlatılamadı:', err);
         setError('Video otomatik başlatılamadı. Lütfen ekrana tıklayın.');
+      });
+      // Video yüklendiğinde işaretle
+      import('@/services/fakeUsers').then(module => {
+        module.markVideoAsViewed(fakeUser.id);
       });
     };
 

@@ -88,12 +88,14 @@ export function markVideoAsViewed(userId: string): void {
   if (!viewed.includes(userId)) {
     viewed.push(userId);
     localStorage.setItem(VIEWED_VIDEOS_KEY, JSON.stringify(viewed));
+    console.log(`Video işaretlendi: ${userId}`);
   }
 }
 
 // Tüm görüntülenen videoları sıfırlama (test için)
 export function resetViewedVideos(): void {
   localStorage.removeItem(VIEWED_VIDEOS_KEY);
+  console.log('Görülen videolar sıfırlandı');
 }
 
 // Henüz görüntülenmemiş bir kullanıcı varsa onu döndür
@@ -103,17 +105,13 @@ export function getUnviewedFakeUser(): FakeUser | null {
   
   // Eğer tüm kullanıcılar görüntülenmişse
   if (unviewed.length === 0) {
-    return null; // Tekrar videoları göstermiyoruz, null dönüyoruz
+    console.log('Tüm videolar görüntülenmiş, null dönülüyor');
+    return null;
   }
   
   // Rastgele bir görüntülenmemiş kullanıcı döndür
   const randomIndex = Math.floor(Math.random() * unviewed.length);
-  const selectedUser = unviewed[randomIndex];
-  
-  // Seçilen kullanıcıyı görüntülenmiş olarak işaretle
-  markVideoAsViewed(selectedUser.id);
-  
-  return selectedUser;
+  return unviewed[randomIndex];
 }
 
 // Rastgele bir sahte kullanıcı seçme fonksiyonu

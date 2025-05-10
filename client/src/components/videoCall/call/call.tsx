@@ -78,11 +78,9 @@ export default function Call() {
   
   // Sahte eşleşme oluşturma fonksiyonu
   const createFakeMatch = useCallback(() => {
-    // Dinamik import ile fakeUsers modülünü al
     import('@/services/fakeUsers').then(module => {
       const unviewedUser = module.getUnviewedFakeUser();
       
-      // Eğer tüm kullanıcılar görüntülenmişse
       if (!unviewedUser) {
         console.log("Tüm sahte kullanıcılar görüntülenmiş, eşleşme aranıyor...");
         setIsMatched(false);
