@@ -1,121 +1,140 @@
-import { useSocket } from "@/context/socketContext";
-import { Button } from "@/components/ui/button";
-import { X, Mic, MicOff, Video, VideoOff, Shuffle } from "lucide-react";
-import { useEffect, useState } from "react";
+// client/src/components/videoCall/videoElement/fakeVideoElement.tsx
+import { useEffect, useRef, useState } from 'react';
+import { FakeUser } from '@/services/fakeUsers';
 
-type controlProps = {
-  strangerId?: string;
-  duoId?: string;
-  friendId?: string;
-  endCall: () => void;
-  closeStream: () => void;
-};
+interface FakeVideoProps {
+  fakeUser: FakeUser;
+  onVideoEnd?: () => void;
+}
 
-export default function Controls({
-  strangerId,
-  duoId,
-  friendId,
-  endCall,
-  closeStream,
-}: controlProps) {
-  const socket = useSocket();
-  const [micEnabled, setMicEnabled] = useState(true);
-  const [videoEnabled, setVideoEnabled] = useState(true);
-
-  function micToggle() {
-    setMicEnabled((prev) => !prev);
-  }
-  function videoToggle() {
-    setVideoEnabled((prev) => !prev);
-  }
+export default function FakeVideo({ fakeUser, onVideoEnd }: FakeVideoProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Önce video kaynaklarını konsola yazdıralım, sorun teşhisi için
+  useEffect(() => {
+    console.log("Video kaynağı:", fakeUser.videoSrc);
+    console.log("Fake kullanıcı bilgileri:", fakeUser);
+  }, [fakeUser]);
 
   useEffect(() => {
-    const videoTracks = document.getElementsByTagName("video");
-    if (videoTracks.length > 0) {
-      for (let i = 0; i < videoTracks.length; i++) {
-        const videoTag: HTMLVideoElement = videoTracks[i];
-        const mediaTracks = videoTag.srcObject as MediaStream;
-        if (mediaTracks) {
-          const tracks = mediaTracks.getTracks();
-          // Toggle video
-          const videoTrack = tracks.find((track) => track.kind === "video");
-          if (videoTrack) {
-            videoTrack.enabled = videoEnabled;
-          }
-          // Toggle audio
-          const audioTrack = tracks.find((track) => track.kind === "audio");
-          if (audioTrack) {
-            audioTrack.enabled = micEnabled;
-          }
-        }
-      }
-    }
-  }, [micEnabled, videoEnabled]);
+    const videoElement = videoRef.current;
+    if (!videoElement) return;
 
-  function handleEndCall() {
-    socket?.emit("skip", { strangerId, duoId, friendId });
-    closeStream();
-    endCall();
-    // "End Call" butonu sadece görüşmeyi sonlandırır, otomatik yeni eşleşme aramaz
-  }
+    // Video yükleme olayı
+    const handleLoadedData = () => {
+      console.log("Video yüklendi:", fakeUser.videoSrc);
+      setIsLoading(false);
+      // Videoyu otomatik başlat
+      videoElement.play().catch(err => {
+        console.error('Video otomatik başlatılamadı:', err);
+        setError('Video otomatik başlatılamadı. Lütfen ekrana tıklayın.');
+      });
+    };
+
+    // Video bitti olayı
+    const handleEnded = () => {
+      console.log("Video bitti:", fakeUser.videoSrc);
+      // Video bittiğinde tekrar başlat veya callback çağır
+      if (onVideoEnd) {
+        onVideoEnd();
+      } else {
+        // Döngü modunda çal
+        videoElement.currentTime = 0;
+        videoElement.play().catch(err => {
+          console.error('Video tekrar başlatılamadı:', err);
+        });
+      }
+    };
+
+    // Video hata olayı
+    const handleError = (e: any) => {
+      console.error('Video yükleme hatası:', e);
+      setError('Video yüklenirken bir hata oluştu: ' + (e.message || 'Bilinmeyen hata'));
+      setIsLoading(false);
+    };
+
+    // Olay dinleyicileri ekle
+    videoElement.addEventListener('loadeddata', handleLoadedData);
+    videoElement.addEventListener('ended', handleEnded);
+    videoElement.addEventListener('error', handleError);
+
+    // Temizleme fonksiyonu
+    return () => {
+      videoElement.removeEventListener('loadeddata', handleLoadedData);
+      videoElement.removeEventListener('ended', handleEnded);
+      videoElement.removeEventListener('error', handleError);
+    };
+  }, [fakeUser, onVideoEnd]);
   
-  function handleNextMatch() {
-    // Önce mevcut aramayi sonlandır
-    socket?.emit("skip", { strangerId, duoId, friendId });
-    
-    // Sonra yeni eşleşme ara (şu an için sadece endCall çağırıyoruz)
-    // Bu, Call.tsx'deki eşleşme sürecini tekrar başlatacak
-    endCall();
-    
-    // Burada gerçek uygulamada belki bir "arıyor" göstergesi olabilir
-    console.log("Yeni eşleşme aranıyor...");
-  }
+  // Manuel video yükleme denemesi
+  const handleManualPlay = () => {
+    if (videoRef.current) {
+      videoRef.current.play()
+        .then(() => {
+          setIsLoading(false);
+          setError(null);
+        })
+        .catch(err => {
+          console.error("Manuel video başlatma hatası:", err);
+          setError("Video başlatılamadı: " + err.message);
+        });
+    }
+  };
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 px-6 py-4 flex justify-between z-10">
-      <div className="flex gap-2">
-        <Button
-          variant="secondary"
-          size="icon"
-          className="rounded-full h-10 w-10"
-          onClick={micToggle}
-        >
-          {micEnabled ? (
-            <Mic className="h-5 w-5" />
-          ) : (
-            <MicOff className="h-5 w-5" />
+    <div className="relative w-full h-full bg-black">
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="mt-3 text-gray-300">Video yükleniyor...</p>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+          <div className="p-4 bg-red-500/20 rounded-lg text-white text-center">
+            <p>{error}</p>
+            <button 
+              className="mt-2 px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+              onClick={handleManualPlay}
+            >
+              Videoyu Oynat
+            </button>
+          </div>
+        </div>
+      )}
+
+      <video
+        ref={videoRef}
+        src={fakeUser.videoSrc}
+        className="w-full h-full object-cover"
+        playsInline
+        controls
+        muted={false} // Gerçek bir görüşme simülasyonu için sesli
+        preload="auto"
+        onError={(e) => console.error("Video hata:", e)}
+      />
+
+      <div className="absolute bottom-0 left-0 p-4 bg-gradient-to-t from-black to-transparent w-full">
+        <div className="flex items-center">
+          {fakeUser.avatar && (
+            <img 
+              src={fakeUser.avatar} 
+              alt={fakeUser.name} 
+              className="w-8 h-8 rounded-full mr-2 object-cover"
+            />
           )}
-        </Button>
-        <Button
-          variant="secondary"
-          size="icon"
-          className="rounded-full h-10 w-10"
-          onClick={videoToggle}
-        >
-          {videoEnabled ? (
-            <Video className="h-5 w-5" />
-          ) : (
-            <VideoOff className="h-5 w-5" />
-          )}
-        </Button>
-      </div>
-      <div className="flex gap-3">
-        <Button
-          variant="secondary"
-          className="rounded-full"
-          onClick={handleNextMatch}
-        >
-          <Shuffle className="h-5 w-5 mr-2" />
-          Next Match
-        </Button>
-        <Button
-          variant="destructive"
-          className="rounded-full"
-          onClick={handleEndCall}
-        >
-          <X className="h-5 w-5 mr-2" />
-          End Call
-        </Button>
+          <div>
+            <p className="text-xl font-semibold text-white">{fakeUser.name}</p>
+            {fakeUser.country && (
+              <p className="text-sm text-gray-300">{fakeUser.country}</p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

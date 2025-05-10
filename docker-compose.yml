@@ -15,7 +15,6 @@ services:
     environment:
       - WATCHPACK_POLLING=true
       - CHOKIDAR_USEPOLLING=true
-
   backend:
     build:
       context: ./server
@@ -31,7 +30,6 @@ services:
       - /usr/src/app/node_modules
     environment:
       - NODE_ENV=development
-
   postgres:
     image: postgres:latest
     container_name: postgres
@@ -43,6 +41,5 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-
 volumes:
   pgdata:
