@@ -9,66 +9,66 @@ export interface FakeUser {
   country?: string;  // İsteğe bağlı ülke
 }
 
-// Sahte kullanıcı listesi - bunları projeye ekleyeceğiniz videolarla değiştirin
+// Sahte kullanıcı listesi
 export const fakeUsers: FakeUser[] = [
   {
     id: 'fake1',
     name: 'Emma Wilson',
-    videoSrc: '/videos/fake1.mp4', // Bu yolu kontrol edin
+    videoSrc: '/videos/fake1.mp4',
     country: 'United States'
   },
   {
     id: 'fake2',
     name: 'David Chen',
-    videoSrc: '/videos/fake2.mp4', // Bu yolu kontrol edin
+    videoSrc: '/videos/fake2.mp4',
     country: 'Canada'
   },
   {
     id: 'fake3',
     name: 'Sophia Lopez',
-    videoSrc: '/videos/fake3.mp4', // Bu yolu kontrol edin
+    videoSrc: '/videos/fake3.mp4',
     country: 'Spain'
   },
   {
     id: 'fake4',
     name: 'James Brown',
-    videoSrc: '/videos/fake4.mp4', // Bu yolu kontrol edin
+    videoSrc: '/videos/fake4.mp4',
     country: 'UK'
   },
   {
     id: 'fake5',
     name: 'Mia Johnson',
-    videoSrc: '/videos/fake5.mp4', // Bu yolu kontrol edin
+    videoSrc: '/videos/fake5.mp4',
     country: 'Australia'
   },
   {
     id: 'fake6',
     name: 'Alex Kim',
-    videoSrc: '/videos/fake6.mp4', // Bu yolu kontrol edin
+    videoSrc: '/videos/fake6.mp4',
     country: 'South Korea'
   },
   {
     id: 'fake7',
     name: 'Olivia Davis',
-    videoSrc: '/videos/fake7.mp4', // Bu yolu kontrol edin
+    videoSrc: '/videos/fake7.mp4',
     country: 'France'
   },
   {
     id: 'fake8',
     name: 'Mohammed Al-Farsi',
-    videoSrc: '/videos/fake8.mp4', // Bu yolu kontrol edin
+    videoSrc: '/videos/fake8.mp4',
     country: 'UAE'
   },
   {
     id: 'fake9',
     name: 'Anna Petrova',
-    videoSrc: '/videos/fake9.mp4', // Bu yolu kontrol edin
+    videoSrc: '/videos/fake9.mp4',
     country: 'Russia'
   },
   {
     id: 'fake10',
     name: 'Marco Silva',
-    videoSrc: '/videos/fake10.mp4', // Bu yolu kontrol edin
+    videoSrc: '/videos/fake10.mp4',
     country: 'Brazil'
   },
 ];
@@ -91,7 +91,7 @@ export function markVideoAsViewed(userId: string): void {
   }
 }
 
-// Tüm görüntülenen videoları sıfırlama
+// Tüm görüntülenen videoları sıfırlama (test için)
 export function resetViewedVideos(): void {
   localStorage.removeItem(VIEWED_VIDEOS_KEY);
 }
@@ -103,17 +103,17 @@ export function getUnviewedFakeUser(): FakeUser | null {
   
   // Eğer tüm kullanıcılar görüntülenmişse
   if (unviewed.length === 0) {
-    // İsteğe bağlı: tüm görüntülenme kayıtlarını sıfırla ve tekrar başla
-    resetViewedVideos();
-    return getRandomFakeUser();
-    
-    // Veya null döndür (tüm videolar görüntülenmiş)
-    // return null;
+    return null; // Tekrar videoları göstermiyoruz, null dönüyoruz
   }
   
   // Rastgele bir görüntülenmemiş kullanıcı döndür
   const randomIndex = Math.floor(Math.random() * unviewed.length);
-  return unviewed[randomIndex];
+  const selectedUser = unviewed[randomIndex];
+  
+  // Seçilen kullanıcıyı görüntülenmiş olarak işaretle
+  markVideoAsViewed(selectedUser.id);
+  
+  return selectedUser;
 }
 
 // Rastgele bir sahte kullanıcı seçme fonksiyonu

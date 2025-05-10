@@ -8,7 +8,6 @@ import { useParams } from "react-router-dom";
 import FriendCall from "./friendCall";
 import { useFriend } from "@/context/friendContext";
 import { usePeerState } from "@/context/peerStateContext";
-import { getRandomFakeUser, getUnviewedFakeUser } from "@/services/fakeUsers";
 
 type strangerProp = {
   pairId: string;
@@ -79,14 +78,13 @@ export default function Call() {
   
   // Sahte eşleşme oluşturma fonksiyonu
   const createFakeMatch = useCallback(() => {
-    // Önce görüntülenmemiş bir kullanıcı almayı dene
+    // Dinamik import ile fakeUsers modülünü al
     import('@/services/fakeUsers').then(module => {
       const unviewedUser = module.getUnviewedFakeUser();
       
       // Eğer tüm kullanıcılar görüntülenmişse
       if (!unviewedUser) {
         console.log("Tüm sahte kullanıcılar görüntülenmiş, eşleşme aranıyor...");
-        // Eşleşme arama durumuna dön
         setIsMatched(false);
         setStranger(null);
         setIsSearching(true);
@@ -145,13 +143,11 @@ export default function Call() {
           if (shouldCreateFakeMatch) {
             createFakeMatch();
           } else {
-            // Gerçek eşleşme devam ediyor, belki biraz daha bekleyelim
             console.log("Gerçek kullanıcı aranmaya devam ediliyor...");
             
-            // Ek süre sonra yine kontrol et
+            // Ek süre sonra tekrar kontrol et
             searchTimeoutRef.current = setTimeout(() => {
               if (isSearching && !isMatched && isSearchingEnabled) {
-                // Bu sefer kesinlikle fake eşleşme oluştur
                 createFakeMatch();
               }
             }, 5000);
