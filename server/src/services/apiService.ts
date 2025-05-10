@@ -224,6 +224,46 @@ class ApiService {
       user ? res.json("success") : res.json("error");
     }
   }
+
+  // Eklenen yeni metotlar
+  static async getMatches(req: express.Request, res: express.Response) {
+    try {
+      const matches = await psqlClient.match.findMany({
+        orderBy: { startTime: 'desc' }
+      });
+      res.json(matches);
+    } catch (err) {
+      console.error("Error fetching matches:", err);
+      res.status(500).json({ message: "Error fetching matches" });
+    }
+  }
+
+  static async recordMatch(req: express.Request, res: express.Response) {
+    try {
+      const { userId, matchedWith, isFake, token } = req.body;
+      
+      // Token doğrulama
+      const decoded = jwt.verify(token, JWT_SECRET);
+      if (!decoded) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Eşleşmeyi kaydet
+      const match = await psqlClient.match.create({
+        data: {
+          userId,
+          matchedWith,
+          isFake,
+          startTime: new Date()
+        }
+      });
+      
+      res.json({ success: true, match });
+    } catch (err) {
+      console.error("Error recording match:", err);
+      res.status(500).json({ message: "Error recording match" });
+    }
+  }
 }
 
 export default ApiService;

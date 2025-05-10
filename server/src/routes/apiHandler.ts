@@ -15,8 +15,12 @@ router.post("/api/updateUser", ApiService.updateUser);
 
 router.post("/api/addToActiveDuoCall", ApiService.addToActiveDuoCall);
 
-router.post("/api/deleteFromActiveDuoCall", ApiService.deleteFromActiveDuoCall)
+router.post("/api/deleteFromActiveDuoCall", ApiService.deleteFromActiveDuoCall);
 
-router.post("/api/getActiveDuoCall", ApiService.getActiveDuoCall)
+router.post("/api/getActiveDuoCall", ApiService.getActiveDuoCall);
+
+// Yeni eklenen rotalar
+router.get("/api/matches", ApiService.getMatches);
+router.post("/api/recordMatch", ApiService.recordMatch);
 
 export default router;
