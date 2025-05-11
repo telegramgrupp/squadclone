@@ -2,12 +2,30 @@ import { Server, Socket } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
 import { psqlClient } from '../config/database';
 
+// Fake users array
+const fakeUsers = [
+  { id: 'fake1', name: 'Emma Wilson', country: 'USA' },
+  { id: 'fake2', name: 'David Chen', country: 'Canada' },
+  { id: 'fake3', name: 'Sophia Lopez', country: 'Spain' },
+  { id: 'fake4', name: 'James Brown', country: 'UK' },
+  { id: 'fake5', name: 'Mia Johnson', country: 'Australia' },
+  { id: 'fake6', name: 'Alex Kim', country: 'South Korea' },
+  { id: 'fake7', name: 'Olivia Davis', country: 'France' },
+  { id: 'fake8', name: 'Mohammed Al-Farsi', country: 'UAE' }
+];
+
 interface User {
   userId: string;
   socketId: string;
   interests?: string[];
   age?: number;
   isPremium?: boolean;
+}
+
+interface FakeUser {
+  id: string;
+  name: string;
+  country: string;
 }
 
 interface Match {
@@ -20,32 +38,73 @@ interface Match {
   startTime: Date;
   endTime?: Date;
   duration?: number;
+  fakeUser?: FakeUser;
 }
 
 class MatchHandler {
   private io: Server;
   private waitingUsers: User[] = [];
   private activeMatches: Map<string, Match> = new Map();
+  private usedFakeUsers: Set<string> = new Set();
 
   constructor(io: Server) {
     this.io = io;
   }
 
-  /**
-   * Initialize socket event listeners for matching system
-   * @param socket Connected socket instance
-   */
   public initialize(socket: Socket): void {
     socket.on('findMatch', (userData: User) => this.handleFindMatch(socket, userData));
     socket.on('endMatch', (matchId: string) => this.handleEndMatch(socket, matchId));
     socket.on('disconnect', () => this.handleDisconnect(socket));
   }
 
-  /**
-   * Handle new match request from user
-   * @param socket User's socket connection
-   * @param userData User data including ID and preferences
-   */
+  private getRandomFakeUser(): FakeUser | null {
+    // Filter out used fake users
+    const availableFakeUsers = fakeUsers.filter(user => !this.usedFakeUsers.has(user.id));
+    
+    // If all fake users are used, reset the used list
+    if (availableFakeUsers.length === 0) {
+      this.usedFakeUsers.clear();
+      return fakeUsers[Math.floor(Math.random() * fakeUsers.length)];
+    }
+    
+    // Get random available fake user
+    const randomUser = availableFakeUsers[Math.floor(Math.random() * availableFakeUsers.length)];
+    this.usedFakeUsers.add(randomUser.id);
+    return randomUser;
+  }
+
+  private async createFakeMatch(userData: User): Promise<void> {
+    const fakeUser = this.getRandomFakeUser();
+    if (!fakeUser) return;
+
+    const matchId = uuidv4();
+    const match: Match = {
+      matchId,
+      user1Id: userData.userId,
+      user2Id: fakeUser.id,
+      socketId1: userData.socketId,
+      socketId2: `fake-${fakeUser.id}`,
+      isFake: true,
+      startTime: new Date(),
+      fakeUser
+    };
+
+    // Store match in memory
+    this.activeMatches.set(matchId, match);
+
+    // Notify user of match
+    this.io.to(userData.socketId).emit('matched', {
+      matchId,
+      partnerId: fakeUser.id,
+      isFake: true,
+      fakeUser,
+      startTime: match.startTime
+    });
+
+    // Store in database
+    await this.saveMatchToDatabase(match);
+  }
+
   private async handleFindMatch(socket: Socket, userData: User): Promise<void> {
     try {
       // Remove user from waiting list if already there
@@ -55,10 +114,12 @@ class MatchHandler {
       const match = this.findSuitableMatch(userData);
 
       if (match) {
-        // Create match if found suitable user
+        // Create real match if found suitable user
         await this.createMatch(match, userData);
       } else {
-        // Add to waiting list if no match found
+        // Try to find match for 5 seconds before creating fake match
+        socket.emit('matchStatus', { status: 'waiting' });
+        
         this.waitingUsers.push({
           userId: userData.userId,
           socketId: socket.id,
@@ -66,9 +127,18 @@ class MatchHandler {
           age: userData.age,
           isPremium: userData.isPremium
         });
-        
-        // Emit waiting status
-        socket.emit('matchStatus', { status: 'waiting' });
+
+        // Wait for real match for 5 seconds
+        setTimeout(async () => {
+          // Check if user is still waiting
+          const isStillWaiting = this.waitingUsers.some(u => u.socketId === socket.id);
+          if (isStillWaiting) {
+            // Remove from waiting list
+            this.waitingUsers = this.waitingUsers.filter(u => u.socketId !== socket.id);
+            // Create fake match
+            await this.createFakeMatch(userData);
+          }
+        }, 5000);
       }
     } catch (error) {
       console.error('Error in handleFindMatch:', error);
@@ -76,32 +146,10 @@ class MatchHandler {
     }
   }
 
-  /**
-   * Find suitable match from waiting users
-   * @param userData User data to match
-   * @returns Matched user or null
-   */
   private findSuitableMatch(userData: User): User | null {
-    // Basic matching for now - can be extended with filters
     return this.waitingUsers[0] || null;
-
-    // Future premium matching logic example:
-    /*
-    if (userData.isPremium) {
-      return this.waitingUsers.find(user => 
-        user.age >= userData.minAge &&
-        user.age <= userData.maxAge &&
-        this.hasCommonInterests(user.interests, userData.interests)
-      );
-    }
-    */
   }
 
-  /**
-   * Create and initialize new match between users
-   * @param user1 First user
-   * @param user2 Second user
-   */
   private async createMatch(user1: User, user2: User): Promise<void> {
     const matchId = uuidv4();
     const match: Match = {
@@ -110,20 +158,16 @@ class MatchHandler {
       user2Id: user2.userId,
       socketId1: user1.socketId,
       socketId2: user2.socketId,
-      isFake: false, // Set based on your fake user logic
+      isFake: false,
       startTime: new Date(),
     };
 
-    // Store match in memory
     this.activeMatches.set(matchId, match);
-
-    // Remove matched user from waiting list
     this.waitingUsers = this.waitingUsers.filter(u => u.socketId !== user1.socketId);
 
-    // Notify both users
     const matchData = {
       matchId,
-      isFake: match.isFake,
+      isFake: false,
       startTime: match.startTime,
     };
 
@@ -137,15 +181,9 @@ class MatchHandler {
       partnerId: user1.userId,
     });
 
-    // Store match in database
     await this.saveMatchToDatabase(match);
   }
 
-  /**
-   * Handle match end request
-   * @param socket User's socket connection
-   * @param matchId Match ID to end
-   */
   private async handleEndMatch(socket: Socket, matchId: string): Promise<void> {
     try {
       const match = this.activeMatches.get(matchId);
@@ -154,14 +192,22 @@ class MatchHandler {
       match.endTime = new Date();
       match.duration = match.endTime.getTime() - match.startTime.getTime();
 
-      // Update database
       await this.updateMatchInDatabase(match);
 
-      // Notify both users
-      this.io.to(match.socketId1).emit('matchEnded', { matchId, duration: match.duration });
-      this.io.to(match.socketId2).emit('matchEnded', { matchId, duration: match.duration });
+      this.io.to(match.socketId1).emit('matchEnded', { 
+        matchId, 
+        duration: match.duration,
+        isFake: match.isFake 
+      });
 
-      // Clean up
+      if (!match.isFake) {
+        this.io.to(match.socketId2).emit('matchEnded', { 
+          matchId, 
+          duration: match.duration,
+          isFake: match.isFake
+        });
+      }
+
       this.activeMatches.delete(matchId);
     } catch (error) {
       console.error('Error in handleEndMatch:', error);
@@ -169,15 +215,9 @@ class MatchHandler {
     }
   }
 
-  /**
-   * Handle user disconnect
-   * @param socket Disconnected socket
-   */
   private handleDisconnect(socket: Socket): void {
-    // Remove from waiting list
     this.waitingUsers = this.waitingUsers.filter(u => u.socketId !== socket.id);
 
-    // End any active matches
     for (const [matchId, match] of this.activeMatches.entries()) {
       if (match.socketId1 === socket.id || match.socketId2 === socket.id) {
         this.handleEndMatch(socket, matchId);
@@ -185,10 +225,6 @@ class MatchHandler {
     }
   }
 
-  /**
-   * Save new match to database
-   * @param match Match data to save
-   */
   private async saveMatchToDatabase(match: Match): Promise<void> {
     try {
       await psqlClient.match.create({
@@ -205,10 +241,6 @@ class MatchHandler {
     }
   }
 
-  /**
-   * Update existing match in database
-   * @param match Updated match data
-   */
   private async updateMatchInDatabase(match: Match): Promise<void> {
     try {
       await psqlClient.match.update({
