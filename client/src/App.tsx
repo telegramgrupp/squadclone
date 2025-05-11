@@ -6,12 +6,13 @@ import Dashboard from "./components/pages/dashboard";
 import ErrorPage from "./utils/passcode";
 import ProfilePage from "./components/pages/profile";
 import SettingsPage from "./components/pages/setting";
+import CoinStore from "./pages/CoinStore";
 import env from "./utils/enviroment";
 import "./index.css";
 import Auth from "./components/signupSingin/auth";
 import Username from "./components/signupSingin/username";
 import Privacypolicy from "./components/signupSingin/privacypolicy";
-import AdminPanel from "./components/admin/AdminPanel"; // Yeni ekle
+import AdminPanel from "./components/admin/AdminPanel";
 
 function App() {
   return (
@@ -28,9 +29,10 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/Settings" element={<SettingsPage />} />
+        <Route path="/store" element={<CoinStore />} />
         <Route path="/*" element={<ErrorPage />} />
         <Route path="/privacypolicy" element={<Privacypolicy />} />
-        <Route path="/admin" element={<AdminPanel />} /> {/* Yeni rota */}
+        <Route path="/admin" element={<AdminPanel />} />
       </Routes>
     </Router>
   );
