@@ -37,10 +37,12 @@ export default function Call() {
   const { peerState } = usePeerState();
   const { stream, closeStream } = useMedia();
   const [isMatched, setIsMatched] = useState(false);
-  const [isSearching, setIsSearching] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
   const [isSearchingEnabled, setIsSearchingEnabled] = useState(true);
   const [duo, setDuo] = useState<strangerProp | null>(null);
   const [stranger, setStranger] = useState<strangerProp | null>(null);
+  const [readyToMatch, setReadyToMatch] = useState(false);
+  const [matchType, setMatchType] = useState<"real" | "fake" | null>(null);
   
   // Sahte eşleşme zamanlayıcısı için ref
   const searchTimeoutRef = useRef<any>(null);
@@ -49,6 +51,7 @@ export default function Call() {
     (data?: userProps) => {
       setIsMatched(!!data);
       setIsSearching(false);
+      setMatchType("real");
       
       if (!data) {
         console.log("stranger left");
@@ -61,7 +64,7 @@ export default function Call() {
         pairName: data.pairName,
         pairId: data.pairId,
         polite: data.polite,
-        isFake: false, // Gerçek kullanıcı
+        isFake: false,
       });
 
       if (data.duoId && data.duoName) {
@@ -69,7 +72,7 @@ export default function Call() {
           pairName: data.duoName,
           pairId: data.duoId,
           polite: data.polite,
-          isFake: false, // Gerçek kullanıcı
+          isFake: false,
         });
       }
     },
@@ -82,27 +85,36 @@ export default function Call() {
       const unviewedUser = module.getUnviewedFakeUser();
       
       if (!unviewedUser) {
-        console.log("Tüm sahte kullanıcılar görüntülenmiş, eşleşme aranıyor...");
-        setIsMatched(false);
-        setStranger(null);
-        setIsSearching(true);
-        return;
+        // Tüm videolar görüntülenmişse listeyi sıfırla
+        module.resetViewedVideos();
+        // Yeni bir kullanıcı al
+        const newUser = module.getUnviewedFakeUser();
+        if (!newUser) {
+          setIsMatched(false);
+          setStranger(null);
+          setIsSearching(true);
+          return;
+        }
+        createFakeMatchWithUser(newUser);
+      } else {
+        createFakeMatchWithUser(unviewedUser);
       }
-      
-      console.log("Sahte kullanıcı ile eşleşiliyor:", unviewedUser.name);
-      
-      setStranger({
-        pairId: `fake-${unviewedUser.id}`,
-        pairName: unviewedUser.name,
-        polite: true,
-        isFake: true,
-        fakeUser: unviewedUser,
-      });
-      
-      setIsMatched(true);
-      setIsSearching(false);
     });
   }, []);
+
+  const createFakeMatchWithUser = (user: any) => {
+    setStranger({
+      pairId: `fake-${user.id}`,
+      pairName: user.name,
+      polite: true,
+      isFake: true,
+      fakeUser: user,
+    });
+    
+    setIsMatched(true);
+    setIsSearching(false);
+    setMatchType("fake");
+  };
 
   const handleBeforeUnload = useCallback(() => {
     socket?.emit("pairedclosedtab", {
@@ -113,37 +125,28 @@ export default function Call() {
   
   // Arama sürecini yönet
   useEffect(() => {
-    if (isSearching && !isMatched && isSearchingEnabled) {
+    if (isSearching && !isMatched && isSearchingEnabled && readyToMatch) {
       console.log("Eşleşme aranıyor...");
       
-      // Arama zamanlayıcısını temizle
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
       }
       
-      // Gerçek kullanıcı bulma girişimi
       if (socket && !stranger && !duoId && !(friend && peerState.friend === "disconnected")) {
         socket.emit("connectPeer", {
           duoSocketId: friend?.pairId,
           duoUsername: friend?.pairName,
         });
-        console.log("Socket ile eşleşme aranıyor...");
       }
       
-      // Rastgele bir süre sonra (3-6 saniye) sahte eşleşme kontrolü yap
       const randomDelay = Math.floor(Math.random() * 3000) + 3000;
       searchTimeoutRef.current = setTimeout(() => {
-        // Hala arama yapılıyorsa ve eşleşme yoksa
         if (isSearching && !isMatched && isSearchingEnabled) {
-          // Olasılık kontrolü - fake eşleşme mi gerçekleşsin?
           const shouldCreateFakeMatch = Math.random() < FAKE_MATCH_PROBABILITY;
           
           if (shouldCreateFakeMatch) {
             createFakeMatch();
           } else {
-            console.log("Gerçek kullanıcı aranmaya devam ediliyor...");
-            
-            // Ek süre sonra tekrar kontrol et
             searchTimeoutRef.current = setTimeout(() => {
               if (isSearching && !isMatched && isSearchingEnabled) {
                 createFakeMatch();
@@ -159,7 +162,7 @@ export default function Call() {
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [isSearching, isMatched, isSearchingEnabled, socket, stranger, peerState, duoId, friend, createFakeMatch]);
+  }, [isSearching, isMatched, isSearchingEnabled, socket, stranger, peerState, duoId, friend, createFakeMatch, readyToMatch]);
 
   useEffect(() => {
     if (socket) {
@@ -174,18 +177,6 @@ export default function Call() {
   }, [socket, handlePeer]);
 
   useEffect(() => {
-    // Yeni arama başlatma veya ilk yükleme
-    setIsSearching(true);
-    
-    // Component unmount olduğunda zamanlayıcıyı temizle
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
     if (!socket) return;
     window.addEventListener("beforeunload", handleBeforeUnload);
 
@@ -197,9 +188,26 @@ export default function Call() {
   return (
     <>
       <div className="w-1/2 flex flex-col bg-gray-800 rounded-2xl shadow-xl overflow-hidden relative">
-        {isMatched
-          ? (
-            <>
+        {isMatched ? (
+          <>
+            <div className="absolute top-4 left-4 z-20 bg-black/50 px-4 py-2 rounded-lg">
+              <p className="text-white">
+                {matchType === "fake" ? "Sahte kullanıcıyla eşleşildi" : "Gerçek kullanıcıyla eşleşildi"}
+              </p>
+            </div>
+            <RemoteCall
+              stream={stream}
+              handleCallEnd={() => {
+                setIsMatched(false);
+                setStranger(null);
+                setDuo(null);
+                setIsSearching(true);
+                setMatchType(null);
+              }}
+              stranger={stranger}
+              userType={duoId ? "duo" : "stranger"}
+            />
+            {duo && peerState.stranger === "connected" && (
               <RemoteCall
                 stream={stream}
                 handleCallEnd={() => {
@@ -207,40 +215,54 @@ export default function Call() {
                   setStranger(null);
                   setDuo(null);
                   setIsSearching(true);
+                  setMatchType(null);
                 }}
-                stranger={stranger}
-                userType={duoId ? "duo" : "stranger"}
+                stranger={duo}
+                userType={"duo"}
               />
-              {duo && peerState.stranger === "connected" && (
-                <RemoteCall
-                  stream={stream}
-                  handleCallEnd={() => {
-                    setIsMatched(false);
-                    setStranger(null);
-                    setDuo(null);
-                    setIsSearching(true);
-                  }}
-                  stranger={duo}
-                  userType={"duo"}
-                />
-              )}
+            )}
 
-              <Controls
-                strangerId={stranger?.pairId}
-                duoId={duo?.pairId}
-                friendId={friend?.pairId}
-                endCall={() => {
-                  setIsMatched(false);
-                  setStranger(null);
-                  setDuo(null);
-                  setIsSearching(true);
-                }}
-                closeStream={closeStream}
-              />
-            </>
-          )
-          : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-700">
+            <Controls
+              strangerId={stranger?.pairId}
+              duoId={duo?.pairId}
+              friendId={friend?.pairId}
+              endCall={() => {
+                setIsMatched(false);
+                setStranger(null);
+                setDuo(null);
+                setIsSearching(true);
+                setMatchType(null);
+              }}
+              closeStream={closeStream}
+            />
+          </>
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-600 to-purple-700">
+            {stream && !readyToMatch && (
+              <div className="relative w-full h-full">
+                <video
+                  ref={(video) => {
+                    if (video) video.srcObject = stream;
+                  }}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                  <button
+                    onClick={() => {
+                      setReadyToMatch(true);
+                      setIsSearching(true);
+                    }}
+                    className="px-6 py-3 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors"
+                  >
+                    Eşleşmeye Başla
+                  </button>
+                </div>
+              </div>
+            )}
+            {readyToMatch && (
               <div className="text-center">
                 <p className="text-3xl text-white font-semibold mb-4">
                   {isSearching && isSearchingEnabled ? "Eşleşme aranıyor..." : 
@@ -274,8 +296,9 @@ export default function Call() {
                   )}
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+        )}
       </div>
       <FriendCall
         stranger={stranger}
