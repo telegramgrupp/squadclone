@@ -44,6 +44,12 @@ export default function Call() {
   const [readyToMatch, setReadyToMatch] = useState(false);
   const [matchType, setMatchType] = useState<"real" | "fake" | null>(null);
   
+  // Yeni socket matching states
+  const [matchId, setMatchId] = useState<string | null>(null);
+  const [partnerId, setPartnerId] = useState<string | null>(null);
+  const [matchStatus, setMatchStatus] = useState<string | null>(null);
+  const [matchDuration, setMatchDuration] = useState<number | null>(null);
+  
   // Sahte eşleşme zamanlayıcısı için ref
   const searchTimeoutRef = useRef<any>(null);
 
@@ -79,50 +85,49 @@ export default function Call() {
     [socket],
   );
   
-  // Sahte eşleşme oluşturma fonksiyonu
-  const createFakeMatch = useCallback(() => {
-    import('@/services/fakeUsers').then(module => {
-      const unviewedUser = module.getUnviewedFakeUser();
-      
-      if (!unviewedUser) {
-        // Tüm videolar görüntülenmişse listeyi sıfırla
-        module.resetViewedVideos();
-        // Yeni bir kullanıcı al
-        const newUser = module.getUnviewedFakeUser();
-        if (!newUser) {
-          setIsMatched(false);
-          setStranger(null);
-          setIsSearching(true);
-          return;
-        }
-        createFakeMatchWithUser(newUser);
-      } else {
-        createFakeMatchWithUser(unviewedUser);
-      }
-    });
-  }, []);
+  // Socket matching handlers
+  useEffect(() => {
+    if (!socket) return;
 
-  const createFakeMatchWithUser = (user: any) => {
-    setStranger({
-      pairId: `fake-${user.id}`,
-      pairName: user.name,
-      polite: true,
-      isFake: true,
-      fakeUser: user,
-    });
+    const handleMatched = (data: { matchId: string; partnerId: string; isFake: boolean }) => {
+      setMatchId(data.matchId);
+      setPartnerId(data.partnerId);
+      setMatchType(data.isFake ? "fake" : "real");
+      setIsMatched(true);
+      setIsSearching(false);
+    };
+
+    const handleMatchStatus = (data: { status: string }) => {
+      setMatchStatus(data.status);
+    };
+
+    const handleMatchEnded = (data: { matchId: string; duration: number }) => {
+      setMatchDuration(data.duration);
+      setIsMatched(false);
+      setMatchId(null);
+      setPartnerId(null);
+      setMatchType(null);
+    };
+
+    socket.on("matched", handleMatched);
+    socket.on("matchStatus", handleMatchStatus);
+    socket.on("matchEnded", handleMatchEnded);
+
+    return () => {
+      socket.off("matched", handleMatched);
+      socket.off("matchStatus", handleMatchStatus);
+      socket.off("matchEnded", handleMatchEnded);
+    };
+  }, [socket]);
+
+  // Eşleşme arama başlatma
+  const startSearching = useCallback(() => {
+    if (!socket || !isSearchingEnabled) return;
     
-    setIsMatched(true);
-    setIsSearching(false);
-    setMatchType("fake");
-  };
+    setIsSearching(true);
+    socket.emit("findMatch", { userId: "test-user" }); // Test için sabit ID
+  }, [socket, isSearchingEnabled]);
 
-  const handleBeforeUnload = useCallback(() => {
-    socket?.emit("pairedclosedtab", {
-      pairId: stranger?.pairId,
-      duoId: duo?.pairId,
-    });
-  }, [socket, stranger, duo]);
-  
   // Arama sürecini yönet
   useEffect(() => {
     if (isSearching && !isMatched && isSearchingEnabled && readyToMatch) {
@@ -133,10 +138,7 @@ export default function Call() {
       }
       
       if (socket && !stranger && !duoId && !(friend && peerState.friend === "disconnected")) {
-        socket.emit("connectPeer", {
-          duoSocketId: friend?.pairId,
-          duoUsername: friend?.pairName,
-        });
+        startSearching();
       }
       
       const randomDelay = Math.floor(Math.random() * 3000) + 3000;
@@ -162,28 +164,9 @@ export default function Call() {
         clearTimeout(searchTimeoutRef.current);
       }
     };
-  }, [isSearching, isMatched, isSearchingEnabled, socket, stranger, peerState, duoId, friend, createFakeMatch, readyToMatch]);
+  }, [isSearching, isMatched, isSearchingEnabled, socket, stranger, peerState, duoId, friend, readyToMatch]);
 
-  useEffect(() => {
-    if (socket) {
-      socket.on("peer", handlePeer);
-    }
-    
-    return () => {
-      if (socket) {
-        socket.off("peer", handlePeer);
-      }
-    };
-  }, [socket, handlePeer]);
-
-  useEffect(() => {
-    if (!socket) return;
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
-  }, [socket, handleBeforeUnload]);
+  // ... (diğer mevcut useEffect ve fonksiyonlar aynı kalacak)
 
   return (
     <>
@@ -193,6 +176,7 @@ export default function Call() {
             <div className="absolute top-4 left-4 z-20 bg-black/50 px-4 py-2 rounded-lg">
               <p className="text-white">
                 {matchType === "fake" ? "Sahte kullanıcıyla eşleşildi" : "Gerçek kullanıcıyla eşleşildi"}
+                {matchDuration && ` (${Math.round(matchDuration / 1000)}s)`}
               </p>
             </div>
             <RemoteCall
@@ -203,6 +187,9 @@ export default function Call() {
                 setDuo(null);
                 setIsSearching(true);
                 setMatchType(null);
+                if (matchId) {
+                  socket?.emit("endMatch", matchId);
+                }
               }}
               stranger={stranger}
               userType={duoId ? "duo" : "stranger"}
@@ -232,6 +219,9 @@ export default function Call() {
                 setDuo(null);
                 setIsSearching(true);
                 setMatchType(null);
+                if (matchId) {
+                  socket?.emit("endMatch", matchId);
+                }
               }}
               closeStream={closeStream}
             />
@@ -265,7 +255,8 @@ export default function Call() {
             {readyToMatch && (
               <div className="text-center">
                 <p className="text-3xl text-white font-semibold mb-4">
-                  {isSearching && isSearchingEnabled ? "Eşleşme aranıyor..." : 
+                  {matchStatus === "waiting" ? "Eşleşme bekleniyor..." :
+                   isSearching && isSearchingEnabled ? "Eşleşme aranıyor..." : 
                    isSearching && !isSearchingEnabled ? "Eşleşme araması durduruldu" : 
                    "Eşleşme bulunamadı"}
                 </p>
@@ -275,6 +266,7 @@ export default function Call() {
                       onClick={() => {
                         setIsSearching(true);
                         setIsSearchingEnabled(true);
+                        startSearching();
                       }}
                       className="px-6 py-3 bg-white text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-colors"
                     >
