@@ -8,6 +8,7 @@ import { useParams } from "react-router-dom";
 import FriendCall from "./friendCall";
 import { useFriend } from "@/context/friendContext";
 import { usePeerState } from "@/context/peerStateContext";
+import { CoinBar } from "../CoinBar";
 
 type strangerProp = {
   pairId: string;
@@ -120,6 +121,11 @@ export default function Call() {
     };
   }, [socket]);
 
+  const handleExtendTime = useCallback(() => {
+    // Implement time extension logic here
+    console.log("Time extended by 15 seconds");
+  }, []);
+
   // Eşleşme arama başlatma
   const startSearching = useCallback(() => {
     if (!socket || !isSearchingEnabled) return;
@@ -166,11 +172,11 @@ export default function Call() {
     };
   }, [isSearching, isMatched, isSearchingEnabled, socket, stranger, peerState, duoId, friend, readyToMatch]);
 
-  // ... (diğer mevcut useEffect ve fonksiyonlar aynı kalacak)
-
   return (
     <>
       <div className="w-1/2 flex flex-col bg-gray-800 rounded-2xl shadow-xl overflow-hidden relative">
+        {isMatched && <CoinBar userId="test-user" onExtendTime={handleExtendTime} />}
+        
         {isMatched ? (
           <>
             <div className="absolute top-4 left-4 z-20 bg-black/50 px-4 py-2 rounded-lg">
