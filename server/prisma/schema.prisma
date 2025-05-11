@@ -8,7 +8,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 model User {
   id          Int           @id @default(autoincrement())
   email       String        @unique
@@ -16,6 +15,7 @@ model User {
   username    String        @unique
   pfp         String        @default("default")
   about       String        @default("default")
+  coins       Int           @default(10)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   activeUsers ActiveUser[]

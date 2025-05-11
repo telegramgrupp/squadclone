@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import authRoutes from "./routes/apiHandler";
+import coinRoutes from "./routes/coinRoutes";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { PORT, PUBLIC_CLIENT_URL } from "./config/environment";
@@ -20,6 +21,7 @@ const io = new Server(httpServer, {
 app.use(cors());
 app.use(express.json());
 app.use("/", authRoutes);
+app.use("/api/coins", coinRoutes);
 
 // Initialize match handler
 const matchHandler = new MatchHandler(io);
